@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+zeep==4.*
+lxml
+requests
+httpx
+requests-mock
