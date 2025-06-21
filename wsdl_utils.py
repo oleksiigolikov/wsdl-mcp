@@ -19,13 +19,17 @@ def discover_operations(client) -> list[OperationMeta]:
                 signature = op_obj.input.body.type
                 params = _flatten_signature(signature)
                 full = f"{service.name}_{port.name}_{op_name}".lower()
+                # documentation field was removed in zeep 4.x
+                doc = None
+                if getattr(op_obj, "operation", None) is not None:
+                    doc = getattr(op_obj.operation.input, "documentation", None)
                 meta.append(
                     OperationMeta(
                         service=service.name,
                         port=port.name,
                         operation=op_name,
                         full_name=full,
-                        doc=op_obj.operation.input.documentation,
+                        doc=doc,
                         params=params,
                         callable=getattr(client.service, op_name),
                     )
@@ -47,20 +51,31 @@ def render_schema_md(op: OperationMeta) -> str:
 def _flatten_signature(sig) -> list[dict]:
     params = []
     for element in sig.elements:
+        # zeep 4.x returns tuples (name, element)
+        if isinstance(element, tuple) and len(element) == 2:
+            name, element = element
+        else:
+            name = element.name
+
         children = []
-        if isinstance(element.type, xsd.ComplexType):
-            for sub in element.type.elements:
+        el_type = getattr(element, "type", None)
+        if isinstance(el_type, xsd.ComplexType):
+            for sub in el_type.elements:
+                if isinstance(sub, tuple) and len(sub) == 2:
+                    sub_name, sub = sub
+                else:
+                    sub_name = sub.name
                 children.append(
                     dict(
-                        name=sub.name,
+                        name=sub_name,
                         type=sub.type.name,
                         optional=sub.min_occurs == 0,
                     )
                 )
         params.append(
             dict(
-                name=element.name,
-                type=element.type.name,
+                name=name,
+                type=el_type.name if el_type is not None else None,
                 optional=element.min_occurs == 0,
                 children=children or None,
             )
